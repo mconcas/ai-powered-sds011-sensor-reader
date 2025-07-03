@@ -1,9 +1,19 @@
 # Makefile for Multi-Sensor Reader
 # AI-Generated modular C++ project
 
+# Platform detection
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    PLATFORM_FLAGS = -DMACOS
+    PLATFORM = macOS
+else
+    PLATFORM_FLAGS = -DLINUX
+    PLATFORM = Linux
+endif
+
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wextra -O2 -Iinclude
+CXXFLAGS = -std=c++11 -Wall -Wextra -O2 -Iinclude $(PLATFORM_FLAGS)
 LDFLAGS = -lncurses
 
 # Directories

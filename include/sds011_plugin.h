@@ -58,4 +58,9 @@ public:
     int getColorCode(const SensorData& data) const override;
     std::string getQualityDescription(const SensorData& data) const override;
     void cleanup() override;
+    
+    /**
+     * @brief Get known device patterns that are compatible with SDS011
+     */
+    static std::vector<std::string> getKnownDevicePatterns();
 };

@@ -49,37 +49,47 @@ endif()
 
 # Include directories
 include_directories(include)
-include_directories(${NCURSES_INCLUDE_DIRS})
 
 # Source files
-file(GLOB_RECURSE SOURCES "src/*.cpp")
-file(GLOB_RECURSE HEADERS "include/*.h")
+set(LIB_SOURCES
+    src/app_utils.cpp
+    src/interactive_tui.cpp
+    src/sds011_plugin.cpp
+    src/sds011_reader.cpp
+    src/sensor_registry.cpp
+)
 
-# Test source files
-file(GLOB_RECURSE TEST_SOURCES "tests/*.cpp")
+set(LIB_HEADERS
+    include/app_utils.h
+    include/interactive_tui.h
+    include/sds011_plugin.h
+    include/sds011_reader.h
+    include/sensor_plugin.h
+    include/sensor_registry.h
+)
+
+# Sensor library
+add_library(sensor_lib STATIC ${LIB_SOURCES} ${LIB_HEADERS})
+target_include_directories(sensor_lib PUBLIC include)
+target_link_libraries(sensor_lib PRIVATE ${NCURSES_LIBRARIES})
 
 # Main executable
-add_executable(sensor_reader ${SOURCES} ${HEADERS})
-
-# Link libraries
-target_link_libraries(sensor_reader ${NCURSES_LIBRARIES})
+add_executable(sensor_reader src/main.cpp)
+target_link_libraries(sensor_reader PRIVATE sensor_lib)
 
 # Test executables
-if(TEST_SOURCES)
-    # TUI test (requires terminal)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_tui.cpp")
-        add_executable(test_tui tests/test_tui.cpp ${HEADERS})
-        target_link_libraries(test_tui ${NCURSES_LIBRARIES})
-    endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_tui.cpp")
+    add_executable(test_tui tests/test_tui.cpp)
+    target_link_libraries(test_tui PRIVATE sensor_lib)
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_unit.cpp")
+    add_executable(test_unit tests/test_unit.cpp)
+    target_link_libraries(test_unit PRIVATE sensor_lib)
     
-    # Unit test (CI-compatible)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_unit.cpp")
-        add_executable(test_unit tests/test_unit.cpp)
-        
-        # Enable testing
-        enable_testing()
-        add_test(NAME UnitTest COMMAND test_unit)
-    endif()
+    # Enable testing
+    enable_testing()
+    add_test(NAME UnitTest COMMAND test_unit)
 endif()
 
 # Installation

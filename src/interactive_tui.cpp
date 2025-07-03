@@ -9,7 +9,7 @@
 InteractiveTUI::InteractiveTUI() 
     : mainWin(nullptr), headerWin(nullptr), menuWin(nullptr), 
       dataWin(nullptr), statsWin(nullptr), statusWin(nullptr),
-      currentSensor(nullptr), inSensorMode(false) {
+      selectedIndex(0), inSensorMode(false), devicesScanned(false), currentSensor(nullptr) {
     
     // Register available sensor plugins
     registry.registerPlugin(std::unique_ptr<SensorPlugin>(new SDS011Plugin()));
@@ -50,34 +50,105 @@ bool InteractiveTUI::initialize() {
     return true;
 }
 
+void InteractiveTUI::cleanupWindows() {
+    if (headerWin) { delwin(headerWin); headerWin = nullptr; }
+    if (menuWin) { delwin(menuWin); menuWin = nullptr; }
+    if (dataWin) { delwin(dataWin); dataWin = nullptr; }
+    if (statsWin) { delwin(statsWin); statsWin = nullptr; }
+    if (statusWin) { delwin(statusWin); statusWin = nullptr; }
+}
+
 void InteractiveTUI::createWindows() {
+    // Ensure we have valid terminal dimensions
+    getmaxyx(stdscr, maxY, maxX);
+    if (maxY < MIN_TERMINAL_HEIGHT || maxX < MIN_TERMINAL_WIDTH) {
+        return; // Terminal too small, don't create windows
+    }
+    
+    // Clean up existing windows first
+    cleanupWindows();
+    
+    // Clear screen before creating new windows
+    clear();
+    refresh();
+    
     // Header window (top 3 lines)
-    headerWin = newwin(3, maxX, 0, 0);
+    headerWin = newwin(HEADER_HEIGHT, maxX, 0, 0);
+    if (!headerWin) return; // Failed to create header window
     
     if (inSensorMode) {
         // Sensor monitoring layout
-        dataWin = newwin(maxY - 8, maxX, 3, 0);
-        statsWin = newwin(3, maxX / 2, maxY - 5, maxX / 2);
-        statusWin = newwin(2, maxX, maxY - 2, 0);
+        int dataWinHeight = maxY - HEADER_HEIGHT - STATS_HEIGHT - STATUS_HEIGHT;
+        dataWin = newwin(dataWinHeight, maxX, HEADER_HEIGHT, 0);
+        statsWin = newwin(STATS_HEIGHT, maxX, maxY - STATUS_HEIGHT - STATS_HEIGHT, 0);
+        statusWin = newwin(STATUS_HEIGHT, maxX, maxY - STATUS_HEIGHT, 0);
         
-        scrollok(dataWin, TRUE);
+        // Check if all windows were created successfully
+        if (!dataWin || !statsWin || !statusWin) {
+            cleanupWindows();
+            return;
+        }
         
-        box(dataWin, 0, 0);
-        box(statsWin, 0, 0);
-        box(statusWin, 0, 0);
+        if (dataWin) scrollok(dataWin, TRUE);
+        
     } else {
         // Menu layout
-        menuWin = newwin(maxY - 5, maxX, 3, 0);
-        statusWin = newwin(2, maxX, maxY - 2, 0);
+        int menuWinHeight = maxY - HEADER_HEIGHT - STATUS_HEIGHT;
+        menuWin = newwin(menuWinHeight, maxX, HEADER_HEIGHT, 0);
+        statusWin = newwin(STATUS_HEIGHT, maxX, maxY - STATUS_HEIGHT, 0);
         
-        box(menuWin, 0, 0);
-        box(statusWin, 0, 0);
+        // Check if windows were created successfully
+        if (!menuWin || !statusWin) {
+            cleanupWindows();
+            return;
+        }
     }
     
-    box(headerWin, 0, 0);
+    // Draw boxes around all windows
+    if (headerWin) box(headerWin, 0, 0);
+    if (menuWin) box(menuWin, 0, 0);
+    if (dataWin) box(dataWin, 0, 0);
+    if (statsWin) box(statsWin, 0, 0);
+    if (statusWin) box(statusWin, 0, 0);
+}
+
+void InteractiveTUI::performDeviceScan() {
+    // Show scanning status
+    if (statusWin) {
+        wclear(statusWin);
+        box(statusWin, 0, 0);
+        mvwprintw(statusWin, 1, 2, "Scanning for devices... Please wait.");
+        wrefresh(statusWin);
+    }
+    
+    // Perform initial device discovery
+    cachedSensors = registry.discoverSensors();
+    cachedAllDevices = registry.discoverAllDevices();
+    devicesScanned = true;
+    
+    // Clear the scanning status
+    if (statusWin) {
+        wclear(statusWin);
+        box(statusWin, 0, 0);
+        wrefresh(statusWin);
+    }
+}
+
+void InteractiveTUI::refreshDevices() {
+    // Clear cached data and rescan
+    cachedSensors.clear();
+    cachedAllDevices.clear();
+    devicesScanned = false;
+    selectedIndex = 0;  // Reset selection
+    performDeviceScan();
 }
 
 void InteractiveTUI::run() {
+    // Perform initial device scan if not already done
+    if (!devicesScanned) {
+        performDeviceScan();
+    }
+    
     while (true) {
         if (inSensorMode && currentSensor) {
             showSensorData();
@@ -104,45 +175,23 @@ void InteractiveTUI::run() {
 }
 
 void InteractiveTUI::showSensorMenu() {
-    // Clear and recreate windows if needed
-    if (inSensorMode) {
-        inSensorMode = false;
-        if (dataWin) { delwin(dataWin); dataWin = nullptr; }
-        if (statsWin) { delwin(statsWin); statsWin = nullptr; }
-        createWindows();
-    }
-    
     // Draw header
-    wclear(headerWin);
-    box(headerWin, 0, 0);
-    
-    if (has_colors()) {
-        wattron(headerWin, COLOR_PAIR(4) | A_BOLD);
+    if (headerWin) {
+        wclear(headerWin);
+        box(headerWin, 0, 0);
+        
+        if (has_colors()) {
+            wattron(headerWin, COLOR_PAIR(4) | A_BOLD);
+        }
+        mvwprintw(headerWin, 1, 2, "Interactive Sensor Monitor - Sensor Selection");
+        mvwprintw(headerWin, 2, 2, "Use arrow keys (^v) to select, Enter to connect, 'q' to quit, 'r' to refresh");
+        if (has_colors()) {
+            wattroff(headerWin, COLOR_PAIR(4) | A_BOLD);
+        }
+        wrefresh(headerWin);
     }
-    mvwprintw(headerWin, 1, 2, "Interactive Sensor Monitor - Sensor Selection");
-    mvwprintw(headerWin, 2, 2, "Use arrow keys (^v) to select, Enter to connect, 'q' to quit, 'r' to refresh");
-    if (has_colors()) {
-        wattroff(headerWin, COLOR_PAIR(4) | A_BOLD);
-    }
-    wrefresh(headerWin);
     
     // Draw menu
-    wclear(menuWin);
-    box(menuWin, 0, 0);
-    
-    if (has_colors()) {
-        wattron(menuWin, COLOR_PAIR(4) | A_BOLD);
-    }
-    mvwprintw(menuWin, 1, 2, "Scanning for sensors...");
-    if (has_colors()) {
-        wattroff(menuWin, COLOR_PAIR(4) | A_BOLD);
-    }
-    
-    wrefresh(menuWin);
-    
-    // Discover sensors
-    auto sensors = registry.discoverSensors();
-    
     wclear(menuWin);
     box(menuWin, 0, 0);
     
@@ -157,23 +206,112 @@ void InteractiveTUI::showSensorMenu() {
     }
     
     int line = 4;
-    static int selectedIndex = 0;
     
-    // Filter available sensors
-    std::vector<SensorInfo> availableSensors;
-    for (const auto& sensor : sensors) {
-        if (sensor.available) {
-            availableSensors.push_back(sensor);
-        }
-    }
+    // Use cached sensor data instead of rescanning
+    const auto& availableSensors = getAvailableSensors();
     
     if (availableSensors.empty()) {
         if (has_colors()) {
             wattron(menuWin, COLOR_PAIR(3));
         }
-        mvwprintw(menuWin, line, 2, "No sensors detected. Check connections and permissions.");
+        mvwprintw(menuWin, line++, 2, "No working sensors detected.");
+        mvwprintw(menuWin, line++, 2, "");
         if (has_colors()) {
             wattroff(menuWin, COLOR_PAIR(3));
+        }
+        
+        if (has_colors()) {
+            wattron(menuWin, COLOR_PAIR(4));
+        }
+        mvwprintw(menuWin, line++, 2, "Found %zu serial device(s) with permission details:", cachedAllDevices.size());
+        if (has_colors()) {
+            wattroff(menuWin, COLOR_PAIR(4));
+        }
+        
+        // Use cached device information when no sensors work
+        const auto& allDevices = cachedAllDevices;
+        if (!allDevices.empty()) {
+            mvwprintw(menuWin, line++, 2, "");
+            if (has_colors()) {
+                wattron(menuWin, COLOR_PAIR(4) | A_BOLD);
+            }
+            mvwprintw(menuWin, line++, 2, "%-20s %-10s %-12s %-12s %-10s %s", 
+                     "Port", "Type", "Permissions", "Owner:Group", "Access", "Issue");
+            mvwprintw(menuWin, line++, 2, "%s", std::string(maxX - 6, '-').c_str());
+            if (has_colors()) {
+                wattroff(menuWin, COLOR_PAIR(4) | A_BOLD);
+            }
+            
+            for (const auto& device : allDevices) {
+                if (line >= maxY - 4) break; // Prevent overflow
+                
+                std::string owner_group = device.device_perms.owner + ":" + device.device_perms.group;
+                std::string access_status = device.device_perms.getStatusString();
+                std::string issue = device.device_perms.error_message.empty() ? 
+                                  "OK" : device.device_perms.error_message;
+                
+                // Truncate long error messages for display
+                if (issue.length() > 20) {
+                    issue = issue.substr(0, 17) + "...";
+                }
+                
+                // Color code based on device type and access level
+                if (has_colors()) {
+                    if (device.type == "SDS011" && device.available) {
+                        wattron(menuWin, COLOR_PAIR(1)); // Green for working SDS011
+                    } else if (device.type == "SDS011") {
+                        wattron(menuWin, COLOR_PAIR(2)); // Yellow for SDS011 with issues
+                    } else if (device.type == "Unsupported") {
+                        wattron(menuWin, COLOR_PAIR(6)); // Magenta for unsupported
+                    } else {
+                        wattron(menuWin, COLOR_PAIR(3)); // Red for other issues
+                    }
+                }
+                
+                mvwprintw(menuWin, line++, 2, "%-20s %-10s %-12s %-12s %-10s %s", 
+                         device.port.c_str(),
+                         device.type.c_str(),
+                         device.device_perms.getPermissionString().c_str(),
+                         owner_group.c_str(),
+                         access_status.c_str(),
+                         issue.c_str());
+                
+                if (has_colors()) {
+                    wattroff(menuWin, COLOR_PAIR(6));
+                    wattroff(menuWin, COLOR_PAIR(3));
+                    wattroff(menuWin, COLOR_PAIR(2));
+                    wattroff(menuWin, COLOR_PAIR(1));
+                }
+            }
+            
+            // Show permission fix suggestions
+            if (line < maxY - 8) {
+                mvwprintw(menuWin, line++, 2, "");
+                if (has_colors()) {
+                    wattron(menuWin, COLOR_PAIR(4));
+                }
+                mvwprintw(menuWin, line++, 2, "To fix permission issues:");
+#ifdef MACOS
+                mvwprintw(menuWin, line++, 2, "  sudo chmod 666 /dev/tty.* /dev/cu.*");
+#else
+                mvwprintw(menuWin, line++, 2, "  sudo chmod 666 /dev/ttyUSB* /dev/ttyACM*");
+#endif
+                mvwprintw(menuWin, line++, 2, "  sudo usermod -a -G dialout $USER");
+                mvwprintw(menuWin, line++, 2, "  (then logout and login again)");
+                if (has_colors()) {
+                    wattroff(menuWin, COLOR_PAIR(4));
+                }
+            }
+        } else {
+            mvwprintw(menuWin, line++, 2, "");
+            if (has_colors()) {
+                wattron(menuWin, COLOR_PAIR(3));
+            }
+            mvwprintw(menuWin, line++, 2, "No serial devices found in /dev.");
+            mvwprintw(menuWin, line++, 2, "Please check that your sensor is connected.");
+            if (has_colors()) {
+                wattroff(menuWin, COLOR_PAIR(3));
+            }
         }
     } else {
         // Ensure selected index is valid
@@ -205,8 +343,13 @@ void InteractiveTUI::showSensorMenu() {
     box(statusWin, 0, 0);
     
     std::ostringstream status;
-    status << "Found " << availableSensors.size() << " available sensor(s) | "
-           << "Controls: ^v Navigate, Enter Select, R Refresh, Q Quit";
+    if (availableSensors.empty()) {
+        status << "No working sensors found | "
+               << "Controls: R Refresh, Q Quit";
+    } else {
+        status << "Found " << availableSensors.size() << " available sensor(s) | "
+               << "Controls: ^v Navigate, Enter Select, R Refresh, Q Quit";
+    }
     
     mvwprintw(statusWin, 1, 2, "%s", status.str().c_str());
     wrefresh(statusWin);
@@ -216,21 +359,23 @@ void InteractiveTUI::showSensorData() {
     if (!currentSensor) return;
     
     // Draw header
-    wclear(headerWin);
-    box(headerWin, 0, 0);
-    
-    if (has_colors()) {
-        wattron(headerWin, COLOR_PAIR(4) | A_BOLD);
+    if (headerWin) {
+        wclear(headerWin);
+        box(headerWin, 0, 0);
+        
+        if (has_colors()) {
+            wattron(headerWin, COLOR_PAIR(4) | A_BOLD);
+        }
+        mvwprintw(headerWin, 1, 2, "%s - %s", 
+                 currentSensor->getTypeName().c_str(), 
+                 currentSensor->getDescription().c_str());
+        mvwprintw(headerWin, 2, 2, "Port: %s | Press 'b' to go back, 'c' to clear, 'q' to quit", 
+                 currentSensor->getCurrentPort().c_str());
+        if (has_colors()) {
+            wattroff(headerWin, COLOR_PAIR(4) | A_BOLD);
+        }
+        wrefresh(headerWin);
     }
-    mvwprintw(headerWin, 1, 2, "%s - %s", 
-             currentSensor->getTypeName().c_str(), 
-             currentSensor->getDescription().c_str());
-    mvwprintw(headerWin, 2, 2, "Port: %s | Press 'b' to go back, 'c' to clear data, 'q' to quit", 
-             currentSensor->getCurrentPort().c_str());
-    if (has_colors()) {
-        wattroff(headerWin, COLOR_PAIR(4) | A_BOLD);
-    }
-    wrefresh(headerWin);
     
     updateDataWindow();
     updateStatsWindow();
@@ -356,50 +501,54 @@ void InteractiveTUI::updateStatusWindow() {
 }
 
 int InteractiveTUI::handleMenuInput() {
-    static int selectedIndex = 0;
-    
+    const auto availableSensors = getAvailableSensors();
+
     int ch = getch();
     switch (ch) {
         case 'q':
         case 'Q':
             return 1; // Quit
-            
+
         case KEY_UP:
-            selectedIndex = std::max(0, selectedIndex - 1);
-            break;
-            
-        case KEY_DOWN: {
-            auto sensors = registry.discoverSensors();
-            std::vector<SensorInfo> available;
-            for (const auto& s : sensors) {
-                if (s.available) available.push_back(s);
+            if (!availableSensors.empty()) {
+                selectedIndex = std::max(0, selectedIndex - 1);
             }
-            selectedIndex = std::min(selectedIndex + 1, (int)available.size() - 1);
             break;
-        }
-        
+
+        case KEY_DOWN:
+            if (!availableSensors.empty()) {
+                selectedIndex = std::min(selectedIndex + 1, (int)availableSensors.size() - 1);
+            }
+            break;
+
         case '\n':
         case '\r':
-        case KEY_ENTER: {
-            auto sensors = registry.discoverSensors();
-            std::vector<SensorInfo> available;
-            for (const auto& s : sensors) {
-                if (s.available) available.push_back(s);
-            }
-            
-            if (selectedIndex >= 0 && selectedIndex < (int)available.size()) {
-                if (selectSensor(available[selectedIndex])) {
+        case KEY_ENTER:
+            if (selectedIndex >= 0 && selectedIndex < (int)availableSensors.size()) {
+                if (selectSensor(availableSensors[selectedIndex])) {
                     inSensorMode = true;
-                    if (menuWin) { delwin(menuWin); menuWin = nullptr; }
+                    cleanupWindows();
                     createWindows();
                 }
             }
             break;
-        }
-        
+
         case 'r':
         case 'R':
-            // Refresh sensor list - just redraw
+            refreshDevices();
+            break;
+
+        case KEY_RESIZE:
+            getmaxyx(stdscr, maxY, maxX);
+            createWindows();
+            break;
+
+        case ERR:
+            // Timeout - no input
+            break;
+
+        default:
+            // Ignore other keys
             break;
     }
     return 0;
@@ -412,17 +561,6 @@ int InteractiveTUI::handleSensorInput() {
         case 'Q':
             return 1; // Quit
             
-        case 'b':
-        case 'B':
-            // Go back to menu
-            inSensorMode = false;
-            currentSensor.reset();
-            clearData();
-            if (dataWin) { delwin(dataWin); dataWin = nullptr; }
-            if (statsWin) { delwin(statsWin); statsWin = nullptr; }
-            createWindows();
-            break;
-            
         case 'c':
         case 'C':
             clearData();
@@ -431,6 +569,16 @@ int InteractiveTUI::handleSensorInput() {
         case KEY_RESIZE:
             getmaxyx(stdscr, maxY, maxX);
             createWindows();
+            break;
+
+        case 'b':
+        case 'B':
+            inSensorMode = false;
+            if (currentSensor) {
+                currentSensor->cleanup();
+                currentSensor.reset();
+            }
+            createWindows(); // Re-create windows for menu mode
             break;
     }
     return 0;
@@ -444,7 +592,20 @@ bool InteractiveTUI::selectSensor(const SensorInfo& info) {
     }
     
     if (!currentSensor->initialize(info.port)) {
-        showError("Failed to initialize sensor at " + info.port);
+        // Provide detailed error information including permission details
+        std::string error_msg = "Failed to initialize sensor at " + info.port;
+        
+        // Add permission details if available
+        if (!info.device_perms.error_message.empty()) {
+            error_msg += ". " + info.device_perms.error_message;
+        }
+        
+        // Add helpful suggestions based on permission status
+        if (info.device_perms.exists && (!info.device_perms.readable || !info.device_perms.writable)) {
+            error_msg += ". Try: sudo chmod 666 " + info.port + " or add user to dialout group";
+        }
+        
+        showError(error_msg);
         currentSensor.reset();
         return false;
     }
@@ -486,11 +647,7 @@ void InteractiveTUI::clearData() {
 }
 
 void InteractiveTUI::cleanup() {
-    if (headerWin) delwin(headerWin);
-    if (menuWin) delwin(menuWin);
-    if (dataWin) delwin(dataWin);
-    if (statsWin) delwin(statsWin);
-    if (statusWin) delwin(statusWin);
+    cleanupWindows();
     
     if (currentSensor) {
         currentSensor->cleanup();
@@ -499,5 +656,16 @@ void InteractiveTUI::cleanup() {
     
     if (mainWin) {
         endwin();
+        mainWin = nullptr;
     }
+}
+
+std::vector<SensorInfo> InteractiveTUI::getAvailableSensors() const {
+    std::vector<SensorInfo> available;
+    for (const auto& sensor : cachedSensors) {
+        if (sensor.available) {
+            available.push_back(sensor);
+        }
+    }
+    return available;
 }

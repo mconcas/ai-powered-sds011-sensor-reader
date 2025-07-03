@@ -28,7 +28,6 @@ namespace AppUtils {
         std::cout << "    ^v         Navigate sensor list (up/down arrows)" << std::endl;
         std::cout << "    Enter      Connect to selected sensor" << std::endl;
         std::cout << "    r          Refresh sensor list" << std::endl;
-        std::cout << "    b          Back to sensor selection" << std::endl;
         std::cout << "    c          Clear collected data" << std::endl;
         std::cout << "    q          Quit the program" << std::endl;
         std::cout << std::endl;
