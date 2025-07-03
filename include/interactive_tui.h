@@ -27,12 +27,6 @@ private:
     bool inSensorMode;
     
     /**
-     * @brief Get navigation symbols (Unicode or ASCII fallback)
-     * @return String with navigation symbols
-     */
-    std::string getNavigationSymbols() const;
-    
-    /**
      * @brief Create and position all windows
      */
     void createWindows();

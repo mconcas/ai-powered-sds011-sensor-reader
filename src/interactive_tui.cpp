@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <sstream>
 #include <thread>
-#include <locale.h>
 
 InteractiveTUI::InteractiveTUI() 
     : mainWin(nullptr), headerWin(nullptr), menuWin(nullptr), 
@@ -21,9 +20,6 @@ InteractiveTUI::~InteractiveTUI() {
 }
 
 bool InteractiveTUI::initialize() {
-    // Set UTF-8 locale for proper Unicode support
-    setlocale(LC_ALL, "");
-    
     // Initialize ncurses
     mainWin = initscr();
     if (mainWin == nullptr) {
@@ -105,11 +101,6 @@ void InteractiveTUI::run() {
         refresh();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-}
-
-std::string InteractiveTUI::getNavigationSymbols() const {
-    // Use ASCII fallback for maximum compatibility
-    return "^v";
 }
 
 void InteractiveTUI::showSensorMenu() {

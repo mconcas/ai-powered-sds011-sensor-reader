@@ -14,11 +14,6 @@ build/
 *.o
 *.obj
 
-# Legacy files
-Makefile.old
-read.cxx
-test_tui.cxx
-
 # Libraries
 *.lib
 *.a
