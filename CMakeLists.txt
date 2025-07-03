@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(MultiSensorReader VERSION 1.0.0 LANGUAGES CXX)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Build configuration
@@ -50,28 +50,56 @@ endif()
 # Include directories
 include_directories(include)
 
-# Source files
+# Core library source files (excluding plugin-specific files)
 set(LIB_SOURCES
     src/app_utils.cpp
     src/interactive_tui.cpp
-    src/sds011_plugin.cpp
-    src/sds011_reader.cpp
+    src/plugin_manager.cpp
     src/sensor_registry.cpp
+    src/sds011_reader.cpp  # Keep for compatibility until fully migrated
 )
 
 set(LIB_HEADERS
     include/app_utils.h
     include/interactive_tui.h
-    include/sds011_plugin.h
-    include/sds011_reader.h
+    include/plugin_interface.h
+    include/plugin_manager.h
     include/sensor_plugin.h
     include/sensor_registry.h
+    include/sds011_reader.h  # Keep for compatibility
 )
 
-# Sensor library
+# Core sensor library (no plugins)
 add_library(sensor_lib STATIC ${LIB_SOURCES} ${LIB_HEADERS})
 target_include_directories(sensor_lib PUBLIC include)
 target_link_libraries(sensor_lib PRIVATE ${NCURSES_LIBRARIES})
+
+# Add dynamic loading support
+if(MACOS)
+    target_link_libraries(sensor_lib PRIVATE ${CMAKE_DL_LIBS})
+elseif(LINUX)
+    target_link_libraries(sensor_lib PRIVATE dl)
+endif()
+
+# Create plugins directory in build
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
+
+# SDS011 Plugin as shared library
+add_library(sds011_plugin SHARED 
+    plugins/sds011/sds011_plugin.cpp
+    src/sds011_reader.cpp  # Include the SDS011Reader implementation
+)
+target_include_directories(sds011_plugin PRIVATE include)
+target_link_libraries(sds011_plugin PRIVATE ${NCURSES_LIBRARIES})
+set_target_properties(sds011_plugin PROPERTIES
+    PREFIX ""
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
+)
+if(MACOS)
+    set_target_properties(sds011_plugin PROPERTIES SUFFIX ".dylib")
+else()
+    set_target_properties(sds011_plugin PROPERTIES SUFFIX ".so")
+endif()
 
 # Main executable
 add_executable(sensor_reader src/main.cpp)
@@ -92,8 +120,16 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_unit.cpp")
     add_test(NAME UnitTest COMMAND test_unit)
 endif()
 
+# Plugin system test
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_plugin_system.cpp")
+    add_executable(test_plugin_system test_plugin_system.cpp)
+    target_link_libraries(test_plugin_system PRIVATE sensor_lib)
+endif()
+
 # Installation
 install(TARGETS sensor_reader DESTINATION bin)
+install(TARGETS sds011_plugin DESTINATION lib/sensor_reader/plugins)
+install(DIRECTORY DESTINATION lib/sensor_reader/plugins)
 
 # Package configuration
 set(CPACK_PACKAGE_NAME "MultiSensorReader")

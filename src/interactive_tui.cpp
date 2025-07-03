@@ -1,5 +1,5 @@
 #include "interactive_tui.h"
-#include "sds011_plugin.h"
+#include "plugin_manager.h"
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
@@ -9,10 +9,11 @@
 InteractiveTUI::InteractiveTUI() 
     : mainWin(nullptr), headerWin(nullptr), menuWin(nullptr), 
       dataWin(nullptr), statsWin(nullptr), statusWin(nullptr),
-      selectedIndex(0), inSensorMode(false), devicesScanned(false), currentSensor(nullptr) {
+      selectedIndex(0), inSensorMode(false), devicesScanned(false), 
+      currentSensor(nullptr), currentUI(nullptr), currentPlugin(nullptr) {
     
-    // Register available sensor plugins
-    registry.registerPlugin(std::unique_ptr<SensorPlugin>(new SDS011Plugin()));
+    // Initialize plugin manager
+    pluginManager.reset(new PluginManager("./build/plugins"));
 }
 
 InteractiveTUI::~InteractiveTUI() {
@@ -117,13 +118,17 @@ void InteractiveTUI::performDeviceScan() {
     if (statusWin) {
         wclear(statusWin);
         box(statusWin, 0, 0);
-        mvwprintw(statusWin, 1, 2, "Scanning for devices... Please wait.");
+        mvwprintw(statusWin, 1, 2, "Loading plugins and scanning devices... Please wait.");
         wrefresh(statusWin);
     }
     
-    // Perform initial device discovery
-    cachedSensors = registry.discoverSensors();
-    cachedAllDevices = registry.discoverAllDevices();
+    // Load all available plugins
+    if (!pluginManager->loadAllPlugins()) {
+        showError("Warning: Some plugins failed to load");
+    }
+    
+    // Perform device discovery using plugins
+    cachedDevices = pluginManager->detectAllDevices();
     devicesScanned = true;
     
     // Clear the scanning status
@@ -136,8 +141,7 @@ void InteractiveTUI::performDeviceScan() {
 
 void InteractiveTUI::refreshDevices() {
     // Clear cached data and rescan
-    cachedSensors.clear();
-    cachedAllDevices.clear();
+    cachedDevices.clear();
     devicesScanned = false;
     selectedIndex = 0;  // Reset selection
     performDeviceScan();
@@ -208,13 +212,13 @@ void InteractiveTUI::showSensorMenu() {
     int line = 4;
     
     // Use cached sensor data instead of rescanning
-    const auto& availableSensors = getAvailableSensors();
+    const auto& availableDevices = getAvailableDevices();
     
-    if (availableSensors.empty()) {
+    if (availableDevices.empty()) {
         if (has_colors()) {
             wattron(menuWin, COLOR_PAIR(3));
         }
-        mvwprintw(menuWin, line++, 2, "No working sensors detected.");
+        mvwprintw(menuWin, line++, 2, "No compatible devices detected.");
         mvwprintw(menuWin, line++, 2, "");
         if (has_colors()) {
             wattroff(menuWin, COLOR_PAIR(3));
@@ -223,20 +227,20 @@ void InteractiveTUI::showSensorMenu() {
         if (has_colors()) {
             wattron(menuWin, COLOR_PAIR(4));
         }
-        mvwprintw(menuWin, line++, 2, "Found %zu serial device(s) with permission details:", cachedAllDevices.size());
+        mvwprintw(menuWin, line++, 2, "Found %zu device(s) scanned by plugins:", cachedDevices.size());
         if (has_colors()) {
             wattroff(menuWin, COLOR_PAIR(4));
         }
         
-        // Use cached device information when no sensors work
-        const auto& allDevices = cachedAllDevices;
+        // Use cached device information when no devices are accessible
+        const auto& allDevices = cachedDevices;
         if (!allDevices.empty()) {
             mvwprintw(menuWin, line++, 2, "");
             if (has_colors()) {
                 wattron(menuWin, COLOR_PAIR(4) | A_BOLD);
             }
-            mvwprintw(menuWin, line++, 2, "%-20s %-10s %-12s %-12s %-10s %s", 
-                     "Port", "Type", "Permissions", "Owner:Group", "Access", "Issue");
+            mvwprintw(menuWin, line++, 2, "%-20s %-15s %-10s %-20s %s", 
+                     "Port", "Description", "VID:PID", "Plugin Support", "Status");
             mvwprintw(menuWin, line++, 2, "%s", std::string(maxX - 6, '-').c_str());
             if (has_colors()) {
                 wattroff(menuWin, COLOR_PAIR(4) | A_BOLD);
@@ -245,36 +249,28 @@ void InteractiveTUI::showSensorMenu() {
             for (const auto& device : allDevices) {
                 if (line >= maxY - 4) break; // Prevent overflow
                 
-                std::string owner_group = device.device_perms.owner + ":" + device.device_perms.group;
-                std::string access_status = device.device_perms.getStatusString();
-                std::string issue = device.device_perms.error_message.empty() ? 
-                                  "OK" : device.device_perms.error_message;
+                std::string vid_pid = device.vendor_id + ":" + device.product_id;
+                Plugin* plugin = pluginManager->findBestPluginForDevice(device);
+                std::string plugin_support = plugin ? plugin->getPluginName() : "None";
+                std::string status = device.accessible ? "Accessible" : "Blocked";
                 
-                // Truncate long error messages for display
-                if (issue.length() > 20) {
-                    issue = issue.substr(0, 17) + "...";
-                }
-                
-                // Color code based on device type and access level
+                // Color code based on accessibility and plugin support
                 if (has_colors()) {
-                    if (device.type == "SDS011" && device.available) {
-                        wattron(menuWin, COLOR_PAIR(1)); // Green for working SDS011
-                    } else if (device.type == "SDS011") {
-                        wattron(menuWin, COLOR_PAIR(2)); // Yellow for SDS011 with issues
-                    } else if (device.type == "Unsupported") {
-                        wattron(menuWin, COLOR_PAIR(6)); // Magenta for unsupported
+                    if (device.accessible && plugin) {
+                        wattron(menuWin, COLOR_PAIR(1)); // Green for working devices
+                    } else if (plugin) {
+                        wattron(menuWin, COLOR_PAIR(2)); // Yellow for supported but inaccessible
                     } else {
-                        wattron(menuWin, COLOR_PAIR(3)); // Red for other issues
+                        wattron(menuWin, COLOR_PAIR(3)); // Red for unsupported
                     }
                 }
                 
-                mvwprintw(menuWin, line++, 2, "%-20s %-10s %-12s %-12s %-10s %s", 
+                mvwprintw(menuWin, line++, 2, "%-20s %-15s %-10s %-20s %s", 
                          device.port.c_str(),
-                         device.type.c_str(),
-                         device.device_perms.getPermissionString().c_str(),
-                         owner_group.c_str(),
-                         access_status.c_str(),
-                         issue.c_str());
+                         device.description.c_str(),
+                         vid_pid.c_str(),
+                         plugin_support.c_str(),
+                         status.c_str());
                 
                 if (has_colors()) {
                     wattroff(menuWin, COLOR_PAIR(6));
@@ -315,23 +311,25 @@ void InteractiveTUI::showSensorMenu() {
         }
     } else {
         // Ensure selected index is valid
-        selectedIndex = std::max(0, std::min(selectedIndex, (int)availableSensors.size() - 1));
+        selectedIndex = std::max(0, std::min(selectedIndex, (int)availableDevices.size() - 1));
         
-        for (size_t i = 0; i < availableSensors.size() && line < maxY - 7; ++i, ++line) {
-            const auto& sensor = availableSensors[i];
+        for (size_t i = 0; i < availableDevices.size() && line < maxY - 7; ++i, ++line) {
+            const auto& device = availableDevices[i];
+            Plugin* plugin = pluginManager->findBestPluginForDevice(device);
+            std::string pluginName = plugin ? plugin->getPluginName() : "Unknown";
             
             if ((int)i == selectedIndex) {
                 if (has_colors()) {
                     wattron(menuWin, COLOR_PAIR(6) | A_REVERSE);
                 }
-                mvwprintw(menuWin, line, 2, "> %-13s %-10s %-38s Connected", 
-                         sensor.port.c_str(), sensor.type.c_str(), sensor.description.c_str());
+                mvwprintw(menuWin, line, 2, "> %-13s %-10s %-38s Ready", 
+                         device.port.c_str(), pluginName.c_str(), device.description.c_str());
                 if (has_colors()) {
                     wattroff(menuWin, COLOR_PAIR(6) | A_REVERSE);
                 }
             } else {
                 mvwprintw(menuWin, line, 2, "  %-13s %-10s %-38s Available", 
-                         sensor.port.c_str(), sensor.type.c_str(), sensor.description.c_str());
+                         device.port.c_str(), pluginName.c_str(), device.description.c_str());
             }
         }
     }
@@ -343,11 +341,11 @@ void InteractiveTUI::showSensorMenu() {
     box(statusWin, 0, 0);
     
     std::ostringstream status;
-    if (availableSensors.empty()) {
+    if (availableDevices.empty()) {
         status << "No working sensors found | "
                << "Controls: R Refresh, Q Quit";
     } else {
-        status << "Found " << availableSensors.size() << " available sensor(s) | "
+        status << "Found " << availableDevices.size() << " available device(s) | "
                << "Controls: ^v Navigate, Enter Select, R Refresh, Q Quit";
     }
     
@@ -358,73 +356,89 @@ void InteractiveTUI::showSensorMenu() {
 void InteractiveTUI::showSensorData() {
     if (!currentSensor) return;
     
-    // Draw header
-    if (headerWin) {
-        wclear(headerWin);
-        box(headerWin, 0, 0);
-        
-        if (has_colors()) {
-            wattron(headerWin, COLOR_PAIR(4) | A_BOLD);
-        }
-        mvwprintw(headerWin, 1, 2, "%s - %s", 
-                 currentSensor->getTypeName().c_str(), 
-                 currentSensor->getDescription().c_str());
-        mvwprintw(headerWin, 2, 2, "Port: %s | Press 'b' to go back, 'c' to clear, 'q' to quit", 
-                 currentSensor->getCurrentPort().c_str());
-        if (has_colors()) {
-            wattroff(headerWin, COLOR_PAIR(4) | A_BOLD);
-        }
-        wrefresh(headerWin);
-    }
+    // Update header with plugin title
+    updateSensorHeader();
     
+    // Convert deque to vector for plugin interface
+    std::vector<std::unique_ptr<SensorData>> vectorReadings;
+    // Note: Currently using enhanced display methods directly
+    // For future compatibility with plugin UI system
+    
+    // Use our enhanced display methods instead of plugin UI for now
     updateDataWindow();
     updateStatsWindow();
     updateStatusWindow();
 }
 
 void InteractiveTUI::updateDataWindow() {
-    if (!dataWin || readings.empty()) return;
+    if (!dataWin) return;
     
     wclear(dataWin);
     box(dataWin, 0, 0);
     
-    auto headers = currentSensor->getDisplayHeaders();
-    
-    // Draw headers
+    // Header
     if (has_colors()) {
         wattron(dataWin, COLOR_PAIR(4) | A_BOLD);
     }
-    
-    std::ostringstream headerLine;
-    headerLine << std::left << std::setw(10) << headers[0];
-    for (size_t i = 1; i < headers.size(); ++i) {
-        headerLine << " " << std::setw(12) << headers[i];
-    }
-    
-    mvwprintw(dataWin, 1, 2, "%s", headerLine.str().c_str());
+    mvwprintw(dataWin, 1, 2, "Sensor Data Display");
     mvwprintw(dataWin, 2, 2, "%s", std::string(maxX - 6, '-').c_str());
-    
     if (has_colors()) {
         wattroff(dataWin, COLOR_PAIR(4) | A_BOLD);
     }
     
-    // Display readings (most recent first)
-    int line = 3;
-    int maxLines = maxY - 11;
-    
-    for (auto it = readings.rbegin(); it != readings.rend() && line < maxLines; ++it, ++line) {
-        int colorPair = currentSensor->getColorCode(**it);
-        std::string quality = currentSensor->getQualityDescription(**it);
+    if (readings.empty()) {
+        mvwprintw(dataWin, 4, 2, "No data collected yet...");
+    } else {
+        mvwprintw(dataWin, 4, 2, "Total readings: %zu", readings.size());
         
-        if (has_colors()) {
-            wattron(dataWin, COLOR_PAIR(colorPair));
-        }
-        
-        std::string displayStr = (*it)->getDisplayString() + "   " + quality;
-        mvwprintw(dataWin, line, 2, "%s", displayStr.c_str());
-        
-        if (has_colors()) {
-            wattroff(dataWin, COLOR_PAIR(colorPair));
+        // Show latest reading with colored values
+        if (!readings.empty()) {
+            const auto& latest = readings.back();
+            int colorCode = latest->getColorCode();
+            std::string quality = latest->getQualityDescription();
+            
+            // Show latest reading with color coding
+            if (has_colors()) {
+                wattron(dataWin, COLOR_PAIR(colorCode) | A_BOLD);
+            }
+            mvwprintw(dataWin, 5, 2, "Latest: %s", latest->getDisplayString().c_str());
+            if (has_colors()) {
+                wattroff(dataWin, COLOR_PAIR(colorCode) | A_BOLD);
+            }
+            
+            // Show quality description with appropriate color
+            if (has_colors()) {
+                wattron(dataWin, COLOR_PAIR(colorCode));
+            }
+            mvwprintw(dataWin, 6, 2, "Air Quality: %s", quality.c_str());
+            if (has_colors()) {
+                wattroff(dataWin, COLOR_PAIR(colorCode));
+            }
+            
+            // Show recent readings history with colors
+            if (readings.size() > 1) {
+                mvwprintw(dataWin, 8, 2, "Recent readings:");
+                int line = 9;
+                int maxLines = std::min(15, (int)readings.size()); // Show last 15 readings
+                
+                for (int i = std::max(0, (int)readings.size() - maxLines); 
+                     i < (int)readings.size() && line < maxY - HEADER_HEIGHT - STATS_HEIGHT - STATUS_HEIGHT - 2; 
+                     ++i, ++line) {
+                    
+                    const auto& reading = readings[i];
+                    int readingColor = reading->getColorCode();
+                    
+                    if (has_colors()) {
+                        wattron(dataWin, COLOR_PAIR(readingColor));
+                    }
+                    mvwprintw(dataWin, line, 4, "%s  %s", 
+                             reading->getDisplayString().c_str(),
+                             reading->getQualityDescription().c_str());
+                    if (has_colors()) {
+                        wattroff(dataWin, COLOR_PAIR(readingColor));
+                    }
+                }
+            }
         }
     }
     
@@ -432,7 +446,7 @@ void InteractiveTUI::updateDataWindow() {
 }
 
 void InteractiveTUI::updateStatsWindow() {
-    if (!statsWin || readings.empty()) return;
+    if (!statsWin) return;
     
     wclear(statsWin);
     box(statsWin, 0, 0);
@@ -445,32 +459,50 @@ void InteractiveTUI::updateStatsWindow() {
         wattroff(statsWin, COLOR_PAIR(4) | A_BOLD);
     }
     
-    // Calculate statistics (for SDS011 data)
     if (!readings.empty()) {
-        const SDS011Data* first = dynamic_cast<const SDS011Data*>(readings[0].get());
-        if (first) {
-            float sumPM25 = 0, sumPM10 = 0;
-            float minPM25 = first->pm25, maxPM25 = first->pm25;
-            float minPM10 = first->pm10, maxPM10 = first->pm10;
+        // Calculate basic statistics
+        size_t readingCount = readings.size();
+        
+        // For detailed statistics, let the plugin handle it if available
+        if (currentUI && false) { // Disable plugin UI for now due to interface mismatch
+            // Plugin will handle detailed stats
+            // currentUI->updateStatistics(readings);
+        } else {
+            // Basic fallback display
+            mvwprintw(statsWin, 1, 2, "Total readings: %zu", readingCount);
             
-            for (const auto& reading : readings) {
-                const SDS011Data* data = dynamic_cast<const SDS011Data*>(reading.get());
-                if (data) {
-                    sumPM25 += data->pm25;
-                    sumPM10 += data->pm10;
-                    minPM25 = std::min(minPM25, data->pm25);
-                    maxPM25 = std::max(maxPM25, data->pm25);
-                    minPM10 = std::min(minPM10, data->pm10);
-                    maxPM10 = std::max(maxPM10, data->pm10);
-                }
+            // Show latest with color
+            const auto& latest = readings.back();
+            int colorCode = latest->getColorCode();
+            
+            if (has_colors()) {
+                wattron(statsWin, COLOR_PAIR(colorCode));
+            }
+            mvwprintw(statsWin, 2, 2, "Latest data: %s", latest->getDisplayString().c_str());
+            if (has_colors()) {
+                wattroff(statsWin, COLOR_PAIR(colorCode));
             }
             
-            float avgPM25 = sumPM25 / readings.size();
-            float avgPM10 = sumPM10 / readings.size();
-            
-            mvwprintw(statsWin, 1, 2, "PM2.5: Avg %.1f Min %.1f Max %.1f", avgPM25, minPM25, maxPM25);
-            mvwprintw(statsWin, 2, 2, "PM10:  Avg %.1f Min %.1f Max %.1f", avgPM10, minPM10, maxPM10);
+            // Show color legend
+            mvwprintw(statsWin, 1, maxX/2, "Legend: ");
+            if (has_colors()) {
+                wattron(statsWin, COLOR_PAIR(1));
+                mvwprintw(statsWin, 1, maxX/2 + 8, "Good");
+                wattroff(statsWin, COLOR_PAIR(1));
+                
+                wattron(statsWin, COLOR_PAIR(2));
+                mvwprintw(statsWin, 1, maxX/2 + 14, "Moderate");
+                wattroff(statsWin, COLOR_PAIR(2));
+                
+                wattron(statsWin, COLOR_PAIR(3));
+                mvwprintw(statsWin, 1, maxX/2 + 24, "Poor");
+                wattroff(statsWin, COLOR_PAIR(3));
+            } else {
+                mvwprintw(statsWin, 1, maxX/2 + 8, "Good  Moderate  Poor");
+            }
         }
+    } else {
+        mvwprintw(statsWin, 1, 2, "No data available");
     }
     
     wrefresh(statsWin);
@@ -501,7 +533,7 @@ void InteractiveTUI::updateStatusWindow() {
 }
 
 int InteractiveTUI::handleMenuInput() {
-    const auto availableSensors = getAvailableSensors();
+    const auto availableDevices = getAvailableDevices();
 
     int ch = getch();
     switch (ch) {
@@ -510,22 +542,22 @@ int InteractiveTUI::handleMenuInput() {
             return 1; // Quit
 
         case KEY_UP:
-            if (!availableSensors.empty()) {
+            if (!availableDevices.empty()) {
                 selectedIndex = std::max(0, selectedIndex - 1);
             }
             break;
 
         case KEY_DOWN:
-            if (!availableSensors.empty()) {
-                selectedIndex = std::min(selectedIndex + 1, (int)availableSensors.size() - 1);
+            if (!availableDevices.empty()) {
+                selectedIndex = std::min(selectedIndex + 1, (int)availableDevices.size() - 1);
             }
             break;
 
         case '\n':
         case '\r':
         case KEY_ENTER:
-            if (selectedIndex >= 0 && selectedIndex < (int)availableSensors.size()) {
-                if (selectSensor(availableSensors[selectedIndex])) {
+            if (selectedIndex >= 0 && selectedIndex < (int)availableDevices.size()) {
+                if (selectSensor(availableDevices[selectedIndex])) {
                     inSensorMode = true;
                     cleanupWindows();
                     createWindows();
@@ -555,6 +587,7 @@ int InteractiveTUI::handleMenuInput() {
 }
 
 int InteractiveTUI::handleSensorInput() {
+    // Always handle basic TUI commands first
     int ch = getch();
     switch (ch) {
         case 'q':
@@ -564,50 +597,86 @@ int InteractiveTUI::handleSensorInput() {
         case 'c':
         case 'C':
             clearData();
-            break;
+            return 0; // Continue
             
         case KEY_RESIZE:
             getmaxyx(stdscr, maxY, maxX);
             createWindows();
-            break;
-
-        case 'b':
-        case 'B':
-            inSensorMode = false;
-            if (currentSensor) {
-                currentSensor->cleanup();
-                currentSensor.reset();
+            if (currentUI) {
+                currentUI->resize(maxY, maxX);
             }
-            createWindows(); // Re-create windows for menu mode
-            break;
+            return 0; // Continue
+            
+        case ERR:
+            // Timeout - no input
+            return 0; // Continue
+            
+        default:
+            // Let plugin UI handle other keys if available
+            if (currentUI) {
+                // Put the character back and let plugin UI handle it
+                ungetch(ch);
+                int result = currentUI->handleInput();
+                if (result == 2) {
+                    // Plugin UI wants to go back to menu
+                    inSensorMode = false;
+                    if (currentSensor) {
+                        currentSensor->cleanup();
+                        currentSensor.reset();
+                    }
+                    if (currentUI) {
+                        currentUI->cleanup();
+                        currentUI.reset();
+                    }
+                    currentPlugin = nullptr;
+                    createWindows(); // Re-create windows for menu mode
+                    return 0;
+                }
+                return result; // 0=continue, 1=quit
+            }
+            // Ignore unknown keys if no plugin UI
+            return 0; // Continue
     }
-    return 0;
 }
 
-bool InteractiveTUI::selectSensor(const SensorInfo& info) {
-    currentSensor = registry.createPlugin(info.type);
-    if (!currentSensor) {
-        showError("Failed to create sensor plugin");
+bool InteractiveTUI::selectSensor(const DeviceInfo& device) {
+    // Find the best plugin for this device
+    currentPlugin = pluginManager->findBestPluginForDevice(device);
+    if (!currentPlugin) {
+        showError("No compatible plugin found for device: " + device.description);
         return false;
     }
     
-    if (!currentSensor->initialize(info.port)) {
-        // Provide detailed error information including permission details
-        std::string error_msg = "Failed to initialize sensor at " + info.port;
-        
-        // Add permission details if available
-        if (!info.device_perms.error_message.empty()) {
-            error_msg += ". " + info.device_perms.error_message;
+    // Create sensor and UI instances
+    currentSensor = currentPlugin->createSensor();
+    currentUI = currentPlugin->createUI();
+    
+    if (!currentSensor) {
+        showError("Failed to create sensor component");
+        currentSensor.reset();
+        currentUI.reset();
+        currentPlugin = nullptr;
+        return false;
+    }
+    
+    // Initialize the sensor
+    if (!currentSensor->initialize(device.port)) {
+        std::string error_msg = "Failed to initialize sensor at " + device.port;
+        if (!device.accessible) {
+            error_msg += ". Device not accessible - check permissions";
         }
-        
-        // Add helpful suggestions based on permission status
-        if (info.device_perms.exists && (!info.device_perms.readable || !info.device_perms.writable)) {
-            error_msg += ". Try: sudo chmod 666 " + info.port + " or add user to dialout group";
-        }
-        
         showError(error_msg);
         currentSensor.reset();
+        currentUI.reset();
+        currentPlugin = nullptr;
         return false;
+    }
+    
+    // Initialize the plugin UI if available (optional)
+    if (currentUI && !currentUI->initialize(maxY, maxX)) {
+        // Plugin UI initialization failed, but we can continue with built-in TUI
+        showError("Plugin UI failed to initialize, using built-in display");
+        currentUI.reset(); // Clear the failed UI, but keep the sensor
     }
     
     clearData();
@@ -660,12 +729,68 @@ void InteractiveTUI::cleanup() {
     }
 }
 
-std::vector<SensorInfo> InteractiveTUI::getAvailableSensors() const {
-    std::vector<SensorInfo> available;
-    for (const auto& sensor : cachedSensors) {
-        if (sensor.available) {
-            available.push_back(sensor);
+std::vector<DeviceInfo> InteractiveTUI::getAvailableDevices() const {
+    std::vector<DeviceInfo> available;
+    for (const auto& device : cachedDevices) {
+        if (device.accessible) {
+            available.push_back(device);
         }
     }
     return available;
+}
+
+void InteractiveTUI::updateSensorHeader() {
+    if (!headerWin || !currentPlugin) return;
+    
+    wclear(headerWin);
+    box(headerWin, 0, 0);
+    
+    // Get plugin information
+    std::string pluginName = currentPlugin->getPluginName();
+    std::string pluginDescription = currentPlugin->getDescription();
+    
+    // Determine status based on recent readings
+    std::string status = "Active";
+    int statusColor = 1; // Green by default
+    
+    if (!readings.empty()) {
+        // Use the color code from the latest reading for status color
+        int latestColorCode = readings.back()->getColorCode();
+        std::string quality = readings.back()->getQualityDescription();
+        
+        status = "Active - " + quality;
+        statusColor = latestColorCode;
+    } else {
+        status = "Waiting for data...";
+        statusColor = 2; // Yellow
+    }
+    
+    // Display plugin title with colored status
+    if (has_colors()) {
+        wattron(headerWin, COLOR_PAIR(4) | A_BOLD);
+    }
+    mvwprintw(headerWin, 1, 2, "%s", pluginDescription.c_str());
+    if (has_colors()) {
+        wattroff(headerWin, COLOR_PAIR(4) | A_BOLD);
+    }
+    
+    // Show colored status
+    if (has_colors()) {
+        wattron(headerWin, COLOR_PAIR(statusColor) | A_BOLD);
+    }
+    mvwprintw(headerWin, 1, maxX - status.length() - 4, "[%s]", status.c_str());
+    if (has_colors()) {
+        wattroff(headerWin, COLOR_PAIR(statusColor) | A_BOLD);
+    }
+    
+    // Show controls
+    if (has_colors()) {
+        wattron(headerWin, COLOR_PAIR(4));
+    }
+    mvwprintw(headerWin, 2, 2, "Sensor Mode Controls: 'c' Clear data, 'q' Quit");
+    if (has_colors()) {
+        wattroff(headerWin, COLOR_PAIR(4));
+    }
+    
+    wrefresh(headerWin);
 }

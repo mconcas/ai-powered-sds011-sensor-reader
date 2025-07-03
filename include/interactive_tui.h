@@ -1,7 +1,7 @@
 #pragma once
 
-#include "sensor_plugin.h"
-#include "sensor_registry.h"
+#include "plugin_interface.h"
+#include "plugin_manager.h"
 #include <ncurses.h>
 #include <deque>
 #include <memory>
@@ -31,15 +31,16 @@ class InteractiveTUI {
     // Application state
     bool inSensorMode;
     bool devicesScanned;
-    std::unique_ptr<SensorPlugin> currentSensor;
-    std::vector<SensorInfo> cachedSensors;
-    std::vector<SensorInfo> cachedAllDevices;
+    std::unique_ptr<PluginSensor> currentSensor;
+    std::unique_ptr<PluginUI> currentUI;
+    Plugin* currentPlugin;
+    std::vector<DeviceInfo> cachedDevices;
 
     // Sensor data
     std::deque<std::unique_ptr<SensorData>> readings;
     static const size_t MAX_READINGS = 100; // Max readings to store
 
-    SensorRegistry registry;
+    std::unique_ptr<PluginManager> pluginManager;
 
     void createWindows();
     void cleanupWindows();
@@ -72,6 +73,11 @@ class InteractiveTUI {
     void updateStatusWindow();
 
     /**
+     * @brief Update the sensor header with plugin title and status
+     */
+    void updateSensorHeader();
+
+    /**
      * @brief Handle input in menu mode
      */
     int handleMenuInput();
@@ -84,12 +90,12 @@ class InteractiveTUI {
     /**
      * @brief Select and initialize a sensor
      */
-    bool selectSensor(const SensorInfo &info);
+    bool selectSensor(const DeviceInfo &device);
 
     /**
-     * @brief Get a list of available sensors
+     * @brief Get a list of available devices
      */
-    std::vector<SensorInfo> getAvailableSensors() const;
+    std::vector<DeviceInfo> getAvailableDevices() const;
 
   public:
     /**
