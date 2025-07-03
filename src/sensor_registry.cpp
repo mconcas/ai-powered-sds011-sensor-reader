@@ -64,7 +64,21 @@ std::vector<SensorInfo> SensorRegistry::discoverSensors() const {
 std::vector<std::string> SensorRegistry::getCommonPorts() {
     std::vector<std::string> ports;
     
-    // Common USB serial ports
+#ifdef MACOS
+    // macOS USB serial ports
+    for (int i = 0; i < 4; ++i) {
+        ports.push_back("/dev/cu.usbserial-" + std::to_string(i));
+        ports.push_back("/dev/cu.usbmodem" + std::to_string(i));
+        ports.push_back("/dev/cu.SLAB_USBtoUART" + std::to_string(i));
+    }
+    
+    // Common macOS serial ports
+    ports.push_back("/dev/cu.usbserial");
+    ports.push_back("/dev/cu.usbmodem");
+    ports.push_back("/dev/cu.SLAB_USBtoUART");
+    
+#elif defined(LINUX)
+    // Linux USB serial ports
     for (int i = 0; i < 4; ++i) {
         ports.push_back("/dev/ttyUSB" + std::to_string(i));
         ports.push_back("/dev/ttyACM" + std::to_string(i));
@@ -73,6 +87,12 @@ std::vector<std::string> SensorRegistry::getCommonPorts() {
     // Common embedded serial ports
     ports.push_back("/dev/ttyS0");
     ports.push_back("/dev/ttyS1");
+    
+#else
+    // Generic fallback
+    ports.push_back("/dev/ttyUSB0");
+    ports.push_back("/dev/ttyACM0");
+#endif
     
     return ports;
 }

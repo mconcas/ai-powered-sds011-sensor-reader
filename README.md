@@ -28,23 +28,69 @@ A C++ application to read data from multiple sensor types with both console and 
 
 - **Console Mode**: Traditional command-line output for scripting and logging
 
-- **Cross-platform**: Works on Linux systems with ncurses support
+- **Cross-platform**: Works on Linux and macOS systems with ncurses support
 
 ## Requirements
 
-- C++11 compatible compiler (g++)
-- ncurses development library (`libncurses5-dev` on Ubuntu/Debian)
+- C++11 compatible compiler (g++ or clang++)
+- CMake 3.10 or higher
+- ncurses development library
 - SDS011 PM2.5 sensor connected via USB
 
 ## Installation
 
-### Install dependencies (Ubuntu/Debian):
+### Option 1: Using the Build Script (Recommended)
+
+The easiest way to build on both Linux and macOS:
+
 ```bash
-sudo apt-get update
-sudo apt-get install build-essential libncurses5-dev
+# Install dependencies and build everything
+./build.sh all
+
+# Or step by step:
+./build.sh deps    # Install system dependencies
+./build.sh build   # Build the project
+./build.sh test    # Run tests
+./build.sh install # Install system-wide
 ```
 
-### Compile:
+### Option 2: Manual Installation
+
+#### Linux (Ubuntu/Debian):
+```bash
+sudo apt-get update
+sudo apt-get install build-essential cmake libncurses5-dev pkg-config
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+sudo make install
+```
+
+#### Linux (Red Hat/CentOS/Fedora):
+```bash
+sudo dnf install gcc-c++ cmake ncurses-devel pkgconfig
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+sudo make install
+```
+
+#### macOS:
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install dependencies
+brew install cmake ncurses pkg-config
+
+# Build
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(sysctl -n hw.ncpu)
+sudo make install
+```
+
+### Option 3: Legacy Makefile (Linux only)
 ```bash
 make
 ```
@@ -61,13 +107,25 @@ The interactive mode will scan for available sensors and present a menu for sele
 ### Legacy TUI Mode:
 ```bash
 ./sensor_reader --legacy           # Legacy mode with default port
+
+# Linux examples:
 ./sensor_reader --legacy /dev/ttyUSB1  # Legacy mode with custom port
+./sensor_reader --legacy /dev/ttyACM0  # Legacy mode with Arduino-style port
+
+# macOS examples:
+./sensor_reader --legacy /dev/cu.usbserial-1  # Legacy mode with custom port
+./sensor_reader --legacy /dev/cu.usbmodem1    # Legacy mode with modem port
 ```
 
 ### Console Mode:
 ```bash
 ./sensor_reader --no-tui           # Console mode with default port
+
+# Linux examples:
 ./sensor_reader --no-tui /dev/ttyACM0  # Console mode with custom port
+
+# macOS examples:
+./sensor_reader --no-tui /dev/cu.usbserial # Console mode with custom port
 ```
 
 ### Interactive Mode Controls:
@@ -251,3 +309,29 @@ See `debug/README.md` for detailed information about each debug tool.
 ## License
 
 This project is provided as-is for educational and personal use.
+
+## Platform-Specific Serial Port Information
+
+### Linux
+The application automatically detects common Linux serial ports:
+- `/dev/ttyUSB0`, `/dev/ttyUSB1`, etc. - USB-to-serial adapters
+- `/dev/ttyACM0`, `/dev/ttyACM1`, etc. - Arduino-compatible devices
+- `/dev/ttyS0`, `/dev/ttyS1` - Built-in serial ports
+
+To list available ports:
+```bash
+ls /dev/tty{USB,ACM}*
+```
+
+### macOS
+The application automatically detects common macOS serial ports:
+- `/dev/cu.usbserial*` - USB-to-serial adapters
+- `/dev/cu.usbmodem*` - USB modem devices
+- `/dev/cu.SLAB_USBtoUART*` - Silicon Labs USB-to-UART bridges
+
+To list available ports:
+```bash
+ls /dev/cu.*
+```
+
+**Note**: On macOS, use `cu.*` ports instead of `tty.*` ports for better compatibility.

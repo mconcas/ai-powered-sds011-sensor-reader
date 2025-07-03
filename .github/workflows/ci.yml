@@ -1,0 +1,88 @@
+name: Cross-Platform CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        build_type: [Release, Debug]
+        
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake libncurses5-dev pkg-config
+        
+    - name: Install Dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ncurses pkg-config
+        
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+        
+    - name: Test
+      run: |
+        cd build
+        ctest --verbose --output-on-failure
+        
+    - name: Test Help Output
+      run: |
+        cd build
+        ./sensor_reader --help
+        
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: sensor_reader-${{ matrix.os }}-${{ matrix.build_type }}
+        path: |
+          build/sensor_reader
+          build/test_tui
+        retention-days: 30
+        
+  build-legacy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libncurses5-dev
+        
+    - name: Build with Legacy Makefile
+      run: |
+        make clean
+        make -j$(nproc)
+        
+    - name: Test Legacy Build
+      run: |
+        ./sensor_reader --help
+        
+    - name: Upload Legacy Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: sensor_reader-legacy-makefile
+        path: |
+          sensor_reader
+          test_tui
+        retention-days: 30
