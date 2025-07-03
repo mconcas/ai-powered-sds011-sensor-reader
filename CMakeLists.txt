@@ -64,14 +64,22 @@ add_executable(sensor_reader ${SOURCES} ${HEADERS})
 # Link libraries
 target_link_libraries(sensor_reader ${NCURSES_LIBRARIES})
 
-# Test executable (if test sources exist)
+# Test executables
 if(TEST_SOURCES)
-    add_executable(test_tui ${TEST_SOURCES} ${HEADERS})
-    target_link_libraries(test_tui ${NCURSES_LIBRARIES})
+    # TUI test (requires terminal)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_tui.cpp")
+        add_executable(test_tui tests/test_tui.cpp ${HEADERS})
+        target_link_libraries(test_tui ${NCURSES_LIBRARIES})
+    endif()
     
-    # Enable testing
-    enable_testing()
-    add_test(NAME TUITest COMMAND test_tui)
+    # Unit test (CI-compatible)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_unit.cpp")
+        add_executable(test_unit tests/test_unit.cpp)
+        
+        # Enable testing
+        enable_testing()
+        add_test(NAME UnitTest COMMAND test_unit)
+    endif()
 endif()
 
 # Installation
