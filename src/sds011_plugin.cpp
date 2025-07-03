@@ -37,7 +37,7 @@ SDS011Plugin::~SDS011Plugin() {
 
 bool SDS011Plugin::isAvailable(const std::string& port) const {
     // Try to open the port briefly to check availability
-    int test_fd = open(port.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+    int test_fd = open(port.c_str(), O_RDONLY | O_NOCTTY | O_NONBLOCK);
     if (test_fd < 0) {
         return false;
     }

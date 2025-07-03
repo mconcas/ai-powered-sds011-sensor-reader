@@ -21,7 +21,7 @@ namespace AppUtils {
         std::cout << "  serial_port: Serial port device (default: /dev/ttyUSB0)" << std::endl;
         std::cout << std::endl;
         std::cout << "  Interactive Mode Controls:" << std::endl;
-        std::cout << "    ↑↓         Navigate sensor list" << std::endl;
+        std::cout << "    ^v         Navigate sensor list (up/down arrows)" << std::endl;
         std::cout << "    Enter      Connect to selected sensor" << std::endl;
         std::cout << "    r          Refresh sensor list" << std::endl;
         std::cout << "    b          Back to sensor selection" << std::endl;
@@ -39,18 +39,23 @@ namespace AppUtils {
         serial_port = "/dev/ttyUSB0";
         use_tui = true;
         
-        if (argc > 1) {
-            if (std::string(argv[1]) == "-h" || std::string(argv[1]) == "--help") {
+        bool found_port = false;
+        
+        for (int i = 1; i < argc; ++i) {
+            std::string arg = argv[i];
+            
+            if (arg == "-h" || arg == "--help") {
                 printUsage(argv[0]);
                 return false;
-            }
-            if (std::string(argv[1]) == "--no-tui") {
+            } else if (arg == "--no-tui") {
                 use_tui = false;
-                if (argc > 2) {
-                    serial_port = argv[2];
-                }
-            } else {
-                serial_port = argv[1];
+            } else if (arg == "--legacy") {
+                // Legacy flag handled in main()
+                continue;
+            } else if (!found_port && arg[0] != '-') {
+                // This is the serial port argument
+                serial_port = arg;
+                found_port = true;
             }
         }
         

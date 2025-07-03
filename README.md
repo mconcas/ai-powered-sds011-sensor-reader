@@ -1,11 +1,10 @@
-
-# SDS011 PM2.5 Sensor Reader with TUI
+# Multi-Sensor Reader with Plugin Architecture
 
 > **⚠️ AI-Generated Project Disclaimer**
 > 
 > This entire project has been created by AI (GitHub Copilot) without any human writing a single line of code or reading any user manuals. The implementation is based on publicly available protocol specifications and common programming patterns. While the code follows established standards and best practices, users should thoroughly test and validate the functionality before relying on it for critical applications.
 
-A C++ application to read data from the SDS011 PM2.5 sensor with both console and TUI (Text User Interface) modes.
+A C++ application to read data from multiple sensor types with both console and TUI (Text User Interface) modes. Currently supports SDS011 PM2.5 sensors with an extensible plugin architecture for adding new sensor types.
 
 ## Features
 
@@ -54,25 +53,25 @@ make
 
 ### Interactive Mode (default):
 ```bash
-./sds011_reader                    # Auto-detect and select sensors
+./sensor_reader                    # Auto-detect and select sensors
 ```
 
 The interactive mode will scan for available sensors and present a menu for selection. Use arrow keys to navigate and Enter to connect.
 
 ### Legacy TUI Mode:
 ```bash
-./sds011_reader --legacy           # Legacy mode with default port
-./sds011_reader --legacy /dev/ttyUSB1  # Legacy mode with custom port
+./sensor_reader --legacy           # Legacy mode with default port
+./sensor_reader --legacy /dev/ttyUSB1  # Legacy mode with custom port
 ```
 
 ### Console Mode:
 ```bash
-./sds011_reader --no-tui           # Console mode with default port
-./sds011_reader --no-tui /dev/ttyACM0  # Console mode with custom port
+./sensor_reader --no-tui           # Console mode with default port
+./sensor_reader --no-tui /dev/ttyACM0  # Console mode with custom port
 ```
 
 ### Interactive Mode Controls:
-- **↑↓**: Navigate sensor list
+- **^v**: Navigate sensor list
 - **Enter**: Connect to selected sensor
 - **r**: Refresh sensor list
 - **b**: Back to sensor selection (when monitoring)
@@ -100,7 +99,7 @@ The interactive mode will scan for available sensors and present a menu for sele
 │   /dev/ttyUSB1  Unknown    Unidentified device        Available│
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
-│ Found 1 available sensor(s) | ↑↓ Navigate, Enter Select   │
+│ Found 1 available sensor(s) | ^v Navigate, Enter Select   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -230,6 +229,24 @@ Available make targets:
 - `make clean` - Remove all build artifacts
 - `make install` - Install to /usr/local/bin
 - `make help` - Show available targets
+
+## Debug Tools
+
+The `debug/` directory contains debugging tools for troubleshooting and development:
+
+- **debug_discovery** - Tests sensor discovery mechanism
+- **test_ncurses** - Basic ncurses functionality test
+- **test_tui** - TUI component testing
+
+To build and use debug tools:
+```bash
+cd debug
+make all                    # Build all debug tools
+make debug_discovery        # Build specific tool
+./debug_discovery          # Run sensor discovery test
+```
+
+See `debug/README.md` for detailed information about each debug tool.
 
 ## License
 

@@ -1,6 +1,11 @@
 # Compiled binaries
-sds011_reader
+sensor_reader
 test_tui
+
+# Debug programs
+debug/debug_discovery
+debug/test_ncurses
+debug/test_tui
 
 # Build directory
 build/

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <sstream>
 #include <thread>
+#include <locale.h>
 
 InteractiveTUI::InteractiveTUI() 
     : mainWin(nullptr), headerWin(nullptr), menuWin(nullptr), 
@@ -20,6 +21,9 @@ InteractiveTUI::~InteractiveTUI() {
 }
 
 bool InteractiveTUI::initialize() {
+    // Set UTF-8 locale for proper Unicode support
+    setlocale(LC_ALL, "");
+    
     // Initialize ncurses
     mainWin = initscr();
     if (mainWin == nullptr) {
@@ -103,6 +107,11 @@ void InteractiveTUI::run() {
     }
 }
 
+std::string InteractiveTUI::getNavigationSymbols() const {
+    // Use ASCII fallback for maximum compatibility
+    return "^v";
+}
+
 void InteractiveTUI::showSensorMenu() {
     // Clear and recreate windows if needed
     if (inSensorMode) {
@@ -120,7 +129,7 @@ void InteractiveTUI::showSensorMenu() {
         wattron(headerWin, COLOR_PAIR(4) | A_BOLD);
     }
     mvwprintw(headerWin, 1, 2, "Interactive Sensor Monitor - Sensor Selection");
-    mvwprintw(headerWin, 2, 2, "Use arrow keys to select, Enter to connect, 'q' to quit, 'r' to refresh");
+    mvwprintw(headerWin, 2, 2, "Use arrow keys (^v) to select, Enter to connect, 'q' to quit, 'r' to refresh");
     if (has_colors()) {
         wattroff(headerWin, COLOR_PAIR(4) | A_BOLD);
     }
@@ -206,7 +215,7 @@ void InteractiveTUI::showSensorMenu() {
     
     std::ostringstream status;
     status << "Found " << availableSensors.size() << " available sensor(s) | "
-           << "Controls: ↑↓ Navigate, Enter Select, R Refresh, Q Quit";
+           << "Controls: ^v Navigate, Enter Select, R Refresh, Q Quit";
     
     mvwprintw(statusWin, 1, 2, "%s", status.str().c_str());
     wrefresh(statusWin);

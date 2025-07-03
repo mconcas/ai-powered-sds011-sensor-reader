@@ -1,4 +1,4 @@
-# Makefile for SDS011 Sensor Reader
+# Makefile for Multi-Sensor Reader
 # AI-Generated modular C++ project
 
 # Compiler and flags
@@ -15,7 +15,7 @@ OBJ_DIR = $(BUILD_DIR)/obj
 TEST_OBJ_DIR = $(BUILD_DIR)/test_obj
 
 # Target executables
-TARGET = sds011_reader
+TARGET = sensor_reader
 TEST_TARGET = test_tui
 
 # Source files

@@ -125,6 +125,7 @@ int main(int argc, char* argv[]) {
     
     if (use_interactive && use_tui) {
         // New interactive mode
+        std::cout << "Initializing interactive TUI..." << std::endl;
         InteractiveTUI interactive;
         if (!interactive.initialize()) {
             std::cerr << "Failed to initialize interactive TUI. Falling back to legacy mode." << std::endl;
