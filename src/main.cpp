@@ -1,5 +1,6 @@
 #include "sds011_reader.h"
 #include "sds011_tui.h"
+#include "interactive_tui.h"
 #include "app_utils.h"
 #include <iostream>
 #include <iomanip>
@@ -103,15 +104,40 @@ void runTUIMode(SDS011Reader& sensor, const std::string& serial_port) {
 int main(int argc, char* argv[]) {
     std::string serial_port;
     bool use_tui;
+    bool use_interactive = true;
     
     // Parse command line arguments
     if (!AppUtils::parseArguments(argc, argv, serial_port, use_tui)) {
         return 0; // Help was displayed
     }
     
+    // Check for legacy mode flag
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--legacy") {
+            use_interactive = false;
+            break;
+        }
+    }
+    
     // Set up signal handlers for graceful shutdown
     signal(SIGINT, AppUtils::signalHandler);
     signal(SIGTERM, AppUtils::signalHandler);
+    
+    if (use_interactive && use_tui) {
+        // New interactive mode
+        InteractiveTUI interactive;
+        if (!interactive.initialize()) {
+            std::cerr << "Failed to initialize interactive TUI. Falling back to legacy mode." << std::endl;
+            use_interactive = false;
+        } else {
+            std::cout << "Starting interactive sensor monitor..." << std::endl;
+            interactive.run();
+            return 0;
+        }
+    }
+    
+    // Legacy mode - single sensor operation
+    std::cout << "Starting in legacy mode..." << std::endl;
     
     // Initialize sensor reader
     SDS011Reader sensor(serial_port);

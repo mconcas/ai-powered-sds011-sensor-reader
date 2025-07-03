@@ -16,18 +16,23 @@ namespace AppUtils {
         std::cout << "Usage: " << program_name << " [options] [serial_port]" << std::endl;
         std::cout << "  Options:" << std::endl;
         std::cout << "    --no-tui    Disable TUI mode and use console output" << std::endl;
+        std::cout << "    --legacy    Use legacy single-sensor mode instead of interactive" << std::endl;
         std::cout << "    -h, --help  Show this help message" << std::endl;
         std::cout << "  serial_port: Serial port device (default: /dev/ttyUSB0)" << std::endl;
         std::cout << std::endl;
-        std::cout << "  TUI Controls:" << std::endl;
-        std::cout << "    q    Quit the program" << std::endl;
-        std::cout << "    c    Clear all collected data" << std::endl;
+        std::cout << "  Interactive Mode Controls:" << std::endl;
+        std::cout << "    ↑↓         Navigate sensor list" << std::endl;
+        std::cout << "    Enter      Connect to selected sensor" << std::endl;
+        std::cout << "    r          Refresh sensor list" << std::endl;
+        std::cout << "    b          Back to sensor selection" << std::endl;
+        std::cout << "    c          Clear collected data" << std::endl;
+        std::cout << "    q          Quit the program" << std::endl;
         std::cout << std::endl;
         std::cout << "  Examples:" << std::endl;
-        std::cout << "    " << program_name << "                    # TUI mode with default port" << std::endl;
-        std::cout << "    " << program_name << " /dev/ttyUSB1       # TUI mode with custom port" << std::endl;
+        std::cout << "    " << program_name << "                    # Interactive mode (default)" << std::endl;
+        std::cout << "    " << program_name << " --legacy           # Legacy TUI mode with default port" << std::endl;
+        std::cout << "    " << program_name << " --legacy /dev/ttyUSB1  # Legacy TUI mode with custom port" << std::endl;
         std::cout << "    " << program_name << " --no-tui           # Console mode with default port" << std::endl;
-        std::cout << "    " << program_name << " --no-tui /dev/ttyACM0  # Console mode with custom port" << std::endl;
     }
     
     bool parseArguments(int argc, char* argv[], std::string& serial_port, bool& use_tui) {
