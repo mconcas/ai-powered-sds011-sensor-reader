@@ -2,9 +2,17 @@
 sds011_reader
 test_tui
 
+# Build directory
+build/
+
 # Object files
 *.o
 *.obj
+
+# Legacy files
+Makefile.old
+read.cxx
+test_tui.cxx
 
 # Libraries
 *.lib

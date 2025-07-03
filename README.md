@@ -130,10 +130,40 @@ This generates mock sensor data to demonstrate the TUI functionality.
 
 ## File Structure
 
-- `read.cxx` - Main application source code
-- `test_tui.cxx` - TUI demonstration with mock data
-- `Makefile` - Build configuration
+### Source Code Organization
+- `src/` - Source code files
+  - `main.cpp` - Main application entry point
+  - `sds011_reader.cpp` - SDS011 sensor communication implementation
+  - `sds011_tui.cpp` - TUI interface implementation
+  - `app_utils.cpp` - Application utilities and helpers
+- `include/` - Header files
+  - `sds011_reader.h` - SDS011 sensor reader class interface
+  - `sds011_tui.h` - TUI interface class and data structures
+  - `app_utils.h` - Utility functions and global definitions
+- `tests/` - Test programs
+  - `test_tui.cpp` - TUI demonstration with mock data
+- `build/` - Build artifacts (auto-generated)
+  - `obj/` - Object files for main application
+  - `test_obj/` - Object files for test programs
+- `Makefile` - Modern build configuration with modular support
 - `README.md` - This documentation
+- `.gitignore` - Git ignore rules
+
+### Build System
+The project uses a modular Makefile that supports:
+- Separate compilation of modules
+- Automatic dependency tracking
+- Test program building
+- Clean build artifacts management
+- Installation/uninstallation
+
+Available make targets:
+- `make` or `make all` - Build the main application
+- `make test_tui` - Build the TUI test program
+- `make test` - Build and run the TUI test program
+- `make clean` - Remove all build artifacts
+- `make install` - Install to /usr/local/bin
+- `make help` - Show available targets
 
 ## License
 
