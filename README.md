@@ -13,19 +13,12 @@ A C++ application to read data from multiple sensor types with both console and 
   - Plugin-based architecture for different sensor types
   - Real-time sensor monitoring with intuitive controls
   - Easy switching between different sensors
-  - **Enhanced Permission Checking**: Detailed device permission analysis when sensors fail to open
 
 - **Plugin Architecture**: Extensible sensor support system
   - SDS011 PM2.5/PM10 sensor plugin included
   - Easy to add new sensor types as separate plugins
   - Standardized sensor data interface
   - Type-specific display formatting and quality indicators
-
-- **Permission Diagnostics**: Comprehensive device access troubleshooting
-  - Shows all available serial devices and their permissions
-  - Compares current vs. required permissions
-  - Provides specific fix commands for permission issues
-  - Color-coded permission status display
 
 - **Legacy TUI Mode**: Original single-sensor interface
   - Color-coded air quality indicators (Green/Yellow/Red)
@@ -139,6 +132,7 @@ The interactive mode will scan for available sensors and present a menu for sele
 - **^v**: Navigate sensor list
 - **Enter**: Connect to selected sensor
 - **r**: Refresh sensor list
+- **b**: Back to sensor selection (when monitoring)
 - **c**: Clear collected data
 - **q**: Quit the program
 
@@ -171,7 +165,7 @@ The interactive mode will scan for available sensors and present a menu for sele
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ SDS011 - SDS011 PM2.5/PM10 Particulate Matter Sensor      │
-│ Port: /dev/ttyUSB0 | Press 'c' to clear, 'q' to quit   │
+│ Port: /dev/ttyUSB0 | Press 'b' to go back, 'c' to clear   │
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
 │ Time       PM2.5 (µg/m³)  PM10 (µg/m³)   Quality           │

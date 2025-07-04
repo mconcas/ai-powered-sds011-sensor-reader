@@ -1,6 +1,8 @@
 #include "app_utils.h"
 #include <iostream>
 #include <signal.h>
+#include <sstream>
+#include <iomanip>
 
 // Global flag for clean shutdown
 volatile bool g_running = true;
@@ -28,6 +30,7 @@ namespace AppUtils {
         std::cout << "    ^v         Navigate sensor list (up/down arrows)" << std::endl;
         std::cout << "    Enter      Connect to selected sensor" << std::endl;
         std::cout << "    r          Refresh sensor list" << std::endl;
+        std::cout << "    b          Back to sensor selection" << std::endl;
         std::cout << "    c          Clear collected data" << std::endl;
         std::cout << "    q          Quit the program" << std::endl;
         std::cout << std::endl;
@@ -71,5 +74,22 @@ namespace AppUtils {
         }
         
         return true;
+    }
+
+    std::string formatFloat(float value, int maxPrecision) {
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(maxPrecision) << value;
+        std::string str = oss.str();
+        
+        // Remove trailing zeroes but keep at least one decimal place
+        if (str.find('.') != std::string::npos) {
+            str.erase(str.find_last_not_of('0') + 1, std::string::npos);
+            // Ensure we keep at least one decimal place for floating point clarity
+            if (str.back() == '.') {
+                str += '0';
+            }
+        }
+        
+        return str;
     }
 }

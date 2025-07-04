@@ -27,6 +27,14 @@ namespace AppUtils {
      * @return true if arguments were parsed successfully, false if help was requested
      */
     bool parseArguments(int argc, char* argv[], std::string& serial_port, bool& use_tui);
+
+    /**
+     * @brief Format a float value without trailing zeroes
+     * @param value The float value to format
+     * @param maxPrecision Maximum number of decimal places
+     * @return Formatted string without trailing zeroes
+     */
+    std::string formatFloat(float value, int maxPrecision = 1);
 }
 
 // Global flag for clean shutdown

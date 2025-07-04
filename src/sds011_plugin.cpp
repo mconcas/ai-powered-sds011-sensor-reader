@@ -1,4 +1,5 @@
 #include "sds011_plugin.h"
+#include "app_utils.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -11,8 +12,8 @@
 // SDS011Data implementation
 std::string SDS011Data::toString() const {
     std::ostringstream oss;
-    oss << "PM2.5: " << std::fixed << std::setprecision(1) << pm25 
-        << " µg/m³, PM10: " << pm10 << " µg/m³";
+    oss << "PM2.5: " << AppUtils::formatFloat(pm25) 
+        << " µg/m³, PM10: " << AppUtils::formatFloat(pm10) << " µg/m³";
     return oss.str();
 }
 
@@ -23,8 +24,8 @@ std::string SDS011Data::getDisplayString() const {
     std::ostringstream oss;
     oss << std::setfill('0') << std::setw(2) << tm.tm_hour << ":"
         << std::setw(2) << tm.tm_min << ":" << std::setw(2) << tm.tm_sec
-        << "   " << std::fixed << std::setprecision(1) 
-        << std::setw(8) << pm25 << "   " << std::setw(8) << pm10;
+        << "   " << std::setw(8) << std::left << AppUtils::formatFloat(pm25) 
+        << "   " << std::setw(8) << std::left << AppUtils::formatFloat(pm10);
     return oss.str();
 }
 
@@ -36,28 +37,6 @@ SDS011Plugin::~SDS011Plugin() {
 }
 
 bool SDS011Plugin::isAvailable(const std::string& port) const {
-    // First check if this looks like a potential SDS011 device
-    auto known_patterns = getKnownDevicePatterns();
-    bool looks_like_sds011 = false;
-    
-    for (const auto& pattern : known_patterns) {
-        if (pattern.find('*') != std::string::npos) {
-            std::string prefix = pattern.substr(0, pattern.find('*'));
-            if (port.find(prefix) == 0) {
-                looks_like_sds011 = true;
-                break;
-            }
-        } else if (port == pattern) {
-            looks_like_sds011 = true;
-            break;
-        }
-    }
-    
-    // If device name doesn't match SDS011 patterns, don't try to open it
-    if (!looks_like_sds011) {
-        return false;
-    }
-    
     // Try to open the port briefly to check availability
     int test_fd = open(port.c_str(), O_RDONLY | O_NOCTTY | O_NONBLOCK);
     if (test_fd < 0) {
@@ -202,54 +181,4 @@ void SDS011Plugin::cleanup() {
         serial_fd = -1;
     }
     current_port.clear();
-}
-
-std::vector<std::string> SDS011Plugin::getKnownDevicePatterns() {
-    std::vector<std::string> patterns;
-    
-#ifdef MACOS
-    // macOS patterns for SDS011-compatible devices
-    patterns.push_back("/dev/cu.usbserial*");
-    patterns.push_back("/dev/tty.usbserial*");
-    patterns.push_back("/dev/cu.usbmodem*");
-    patterns.push_back("/dev/tty.usbmodem*");
-    patterns.push_back("/dev/cu.SLAB_USBtoUART*");
-    patterns.push_back("/dev/tty.SLAB_USBtoUART*");
-    patterns.push_back("/dev/cu.wchusbserial*");
-    patterns.push_back("/dev/tty.wchusbserial*");
-    patterns.push_back("/dev/cu.CH34*");
-    patterns.push_back("/dev/tty.CH34*");
-    patterns.push_back("/dev/cu.CP210*");
-    patterns.push_back("/dev/tty.CP210*");
-    
-    // Known specific device names that work with SDS011
-    std::vector<std::string> known_devices = {
-        "/dev/cu.usbserial-1140",
-        "/dev/tty.usbserial-1140",
-        "/dev/cu.usbserial-A1B2C3D4", 
-        "/dev/tty.usbserial-A1B2C3D4",
-        "/dev/cu.usbserial-14220",
-        "/dev/tty.usbserial-14220",
-        "/dev/cu.usbserial-1420",
-        "/dev/tty.usbserial-1420"
-    };
-    
-    // Add known devices to patterns
-    patterns.insert(patterns.end(), known_devices.begin(), known_devices.end());
-    
-#else
-    // Linux patterns
-    patterns.push_back("/dev/ttyUSB*");
-    patterns.push_back("/dev/ttyACM*");
-    patterns.push_back("/dev/ttyAMA*");
-    patterns.push_back("/dev/ttyS*");
-    
-    // Known Linux device names
-    for (int i = 0; i < 8; ++i) {
-        patterns.push_back("/dev/ttyUSB" + std::to_string(i));
-        patterns.push_back("/dev/ttyACM" + std::to_string(i));
-    }
-#endif
-    
-    return patterns;
 }

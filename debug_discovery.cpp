@@ -1,59 +1,32 @@
 #include "sensor_registry.h"
 #include "sds011_plugin.h"
 #include <iostream>
-#include <dirent.h>
-#include <sys/stat.h>
 
 int main() {
-    std::cout << "Testing device discovery step by step..." << std::endl;
+    std::cout << "Testing sensor discovery..." << std::endl;
     
-    // First, let's see what's actually in /dev
-    std::cout << "\nListing all devices in /dev starting with 'cu.' or 'tty.':" << std::endl;
-    DIR* dev_dir = opendir("/dev");
-    if (dev_dir) {
-        struct dirent* entry;
-        while ((entry = readdir(dev_dir)) != nullptr) {
-            std::string device_name = entry->d_name;
-            
-            if (device_name.find("cu.") == 0 || device_name.find("tty.") == 0) {
-                std::string full_path = "/dev/" + device_name;
-                struct stat st;
-                bool is_char_device = (stat(full_path.c_str(), &st) == 0 && S_ISCHR(st.st_mode));
-                
-                std::cout << "  " << device_name << " -> " << full_path 
-                          << " (char device: " << (is_char_device ? "yes" : "no") << ")" << std::endl;
-                
-                // Test our pattern matching
-                bool matches_pattern = false;
-                if (device_name.find("usbserial") != std::string::npos ||
-                    device_name.find("usbmodem") != std::string::npos) {
-                    matches_pattern = true;
-                }
-                else if ((device_name.find("cu.usb") == 0 || device_name.find("tty.usb") == 0) &&
-                         device_name.length() > 6) {
-                    matches_pattern = true;
-                }
-                
-                std::cout << "    Pattern match: " << (matches_pattern ? "YES" : "NO") << std::endl;
-            }
-        }
-        closedir(dev_dir);
+    SensorRegistry registry;
+    registry.registerPlugin(std::unique_ptr<SensorPlugin>(new SDS011Plugin()));
+    
+    std::cout << "Registered plugins: " << registry.getAvailableTypes().size() << std::endl;
+    for (const auto& type : registry.getAvailableTypes()) {
+        std::cout << "  - " << type << std::endl;
     }
     
-    std::cout << "\nTesting SDS011 known device patterns:" << std::endl;
-    auto patterns = SDS011Plugin::getKnownDevicePatterns();
-    for (const auto& pattern : patterns) {
-        if (pattern.find('*') == std::string::npos) {
-            struct stat st;
-            bool exists = (stat(pattern.c_str(), &st) == 0 && S_ISCHR(st.st_mode));
-            std::cout << "  " << pattern << ": " << (exists ? "EXISTS" : "not found") << std::endl;
-        }
-    }
+    std::cout << "Testing /dev/ttyUSB0 directly..." << std::endl;
+    SDS011Plugin test_plugin;
+    bool available = test_plugin.isAvailable("/dev/ttyUSB0");
+    std::cout << "SDS011Plugin::isAvailable(\"/dev/ttyUSB0\") = " << available << std::endl;
     
-    std::cout << "\nFinal discovery result:" << std::endl;
-    auto devices = SensorRegistry::discoverSerialDevices();
-    for (const auto& device : devices) {
-        std::cout << "  " << device << std::endl;
+    std::cout << "Discovering sensors..." << std::endl;
+    auto sensors = registry.discoverSensors();
+    std::cout << "Found " << sensors.size() << " sensors:" << std::endl;
+    
+    for (const auto& sensor : sensors) {
+        std::cout << "  Port: " << sensor.port 
+                  << ", Type: " << sensor.type 
+                  << ", Available: " << (sensor.available ? "Yes" : "No")
+                  << ", Description: " << sensor.description << std::endl;
     }
     
     return 0;
