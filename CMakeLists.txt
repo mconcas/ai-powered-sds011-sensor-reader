@@ -62,7 +62,7 @@ file(GLOB_RECURSE TEST_SOURCES "tests/*.cpp")
 add_executable(sensor_reader ${SOURCES} ${HEADERS})
 
 # Link libraries
-target_link_libraries(sensor_reader ${NCURSES_LIBRARIES})
+target_link_libraries(sensor_reader dl ${NCURSES_LIBRARIES})
 
 # Test executables
 if(TEST_SOURCES)
@@ -118,6 +118,7 @@ include(CPack)
 message(STATUS "")
 message(STATUS "=== Build Configuration Summary ===")
 message(STATUS "System: ${CMAKE_SYSTEM_NAME}")
+message(STATUS "Processor: ${CMAKE_SYSTEM_PROCESSOR}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 message(STATUS "C++ flags: ${CMAKE_CXX_FLAGS}")
